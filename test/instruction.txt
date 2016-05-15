@@ -1,0 +1,5 @@
+Directory looks like:
+root/functions_to_test.py
+root/test_folder/test_unit.py
+To run the test in the "root" folder
+python -m pytest test_folder
