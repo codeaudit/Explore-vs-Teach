@@ -1,11 +1,15 @@
 """ Visualization utilities for e_vs_t """
-from e_vs_t import model
-from copy import deepcopy
-from utils import normalizeRow
-from utils import normalizeCol
-
 import numpy as np
 import matplotlib.pyplot as plt
+
+from copy import deepcopy
+
+from e_vs_t import genMasterPermSet
+from e_vs_t import initialize_model
+
+from utils import normalizeRow
+from utils import normalizeCol
+from utils import max_thresh_row
 
 
 def plotHorLines(vec, lim):
@@ -26,37 +30,40 @@ def overlayX(X):
     plt.hold(False)
 
 
+def vis_master_perm_set():
+    perm_set = genMasterPermSet()
+    n = len(perm_set)
+    ncols = 6
+    nrows = np.ceil(n/6)
+    for i in range(n):
+        ax = plt.subplot(nrows, ncols, i+1)
+        plot4x4(perm_set[i])
+        ax.set_xticks([])
+        ax.set_yticks([])
+    plt.show()
+
+
 def vis_config():
-    teacher = model()
+    teacher = initialize_model("full")
+
     nhypo = teacher.nhypo
     nperm = np.array([teacher.nperm[i] for i in range(nhypo)])
-
     for ihypo in range(nhypo):
         for iconfig in range(nperm[ihypo]):
             if (nperm.max() > 12):
                 raise ValueError("Too many configuration to plot")
-            ax = plt.subplot(nhypo, nperm.max(),
-                ihypo*nperm.max() + iconfig + 1)
+            ax = plt.subplot(nhypo, nperm.max(), ihypo*nperm.max() + iconfig + 1)
             plot4x4(teacher.perm[ihypo][iconfig])
             ax.set_xticks([])
             ax.set_yticks([])
-            print('hypo=%s, config=%s, pattern=%s'
-                %(ihypo, iconfig, teacher.perm[ihypo][iconfig]))
-
-    # with NR at last hypo
-    # print("Hypo 3, config 12869, label =", teacher.perm[3][12869])
-    # for iconfig in range(6):
-    #     ax = plt.subplot(4,6, 3*6 + iconfig + 1)
-    #     r = randDistreteSample(teacher.priorLabelGivenHypo[3])
-    #     plot4x4(teacher.perm[3][r])
-    #     ax.set_xticks([])
-    #     ax.set_yticks([])
-
+            # print('hypo=%s, config=%s, pattern=%s'
+            #     %(ihypo, iconfig, teacher.perm[ihypo][iconfig]))
     plt.show()
 
 
 def vis_hypo(ihypo, iconfig):
-    teacher = model()
+    teacher = initialize_model()
+
     # ihypo = randDistreteSample(teacher.priorHypo)
     # iconfig = randDistreteSample(teacher.priorLabelGivenHypo[ihypo])
     print('hypo=%s, config=%s' %(ihypo, iconfig))
@@ -79,7 +86,7 @@ def vis_hypo(ihypo, iconfig):
 
 
 def vis_predict(ihypo, iconfig):
-    learner = model()
+    learner = initialize_model()
     print("Done model assignment.")
 
     X = np.arange(16)
@@ -120,35 +127,38 @@ def vis_predict(ihypo, iconfig):
 
 
 def vis_hypoProbeMatrix(ihypo, iconfig):
-    teacher = model()
+    teacher = initialize_model("full")
+
     Xfull = np.arange(16)
     print('hypo=%s, iconfig=%s' %(ihypo, iconfig))
-    X = np.random.permutation(Xfull)
-    Y = [teacher.gety(teacher.perm[ihypo][iconfig], X[i])
-         for i in range(len(X))]
-    Xd = X[:1]
-    Yd = Y[:1]
+    Yfull = [teacher.gety(teacher.perm[ihypo][iconfig], Xfull[i])
+         for i in range(len(Xfull))]
+    Xd = Xfull[:1]
+    Yd = Yfull[:1]
     print('probe location = %s' %(Xd))
     probeX = np.delete(Xfull, Xd)
 
     teacher.postJoint = teacher.posteriorJoint(Xd, Yd)
     hypoProbeM = teacher.initHypoProbeMatrix(teacher.postJoint, probeX)
 
-    for i in range(5):
+    n_step = 4
+    for i in range(n_step):
         print("iteration %s" %(i))
-        hypoProbeM = vis_iterateNor(teacher, hypoProbeM, probeX, 10)
+        hypoProbeM = vis_iterateNor(teacher, hypoProbeM, probeX)
         plt.show()
 
 
-def vis_iterateNor(person, hypoProbeM, probeX, alpha):
+def vis_iterateNor(person, hypoProbeM, probeX):
     nTrans = 5
+    alpha = 10
 
     M = deepcopy(hypoProbeM)
     ax =plt.subplot(1,nTrans,1)
     plt.imshow(M.transpose(), interpolation="nearest", cmap="gray")
     ax.set_title('input M')
 
-    M = np.power(M, alpha)
+    # M = np.power(M, alpha)
+    M = max_thresh_row(M)
     ax = plt.subplot(1,nTrans,2)
     M1 = deepcopy(M)
     plt.imshow(M1.transpose(), interpolation="nearest", cmap="gray")

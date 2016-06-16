@@ -8,20 +8,15 @@ from utils import normalize
 from utils import makeZero
 from utils import normalizeRow
 from utils import normalizeCol
-from utils import randDistreteSample
+from utils import max_thresh_row
+from utils import randDiscreteSample
 
 import numpy as np
 
-
 """
-2016-02-22
--more generic class for hierarchical configuration?
 2016-03-10
--inference methods in the model class could be its own class?
 -refactore so that class within class becomes list of lists
 -refactored so that no distribution changes inside any method
-2016-03-12
--code a test class using unittest?
 2016-04-08
 -in initHypoProbeMatrix and updateHypoProbeMatrix, should not use
 "if postHypo[ihypo] > 0.:" before model.posteriorLabelGivenHypo
@@ -64,7 +59,8 @@ def genBasePerm(compk):
     if (nk % 2):
         raise ValueError('number of compartment should be even.')
     else:
-        base = np.append(np.zeros(nk/2), np.ones(nk/2)).tolist()
+        nk_half = int(nk/2)
+        base = np.append(np.zeros(nk_half), np.ones(nk_half)).tolist()
     return base
 
 def genAllPerm(nx, compk, base):
@@ -127,15 +123,20 @@ class model:
     nhypo = 3 #4
     x = np.arange(16)
     nx = len(x)
-    allPermSet = genMasterPermSet()
 
-    def __init__(self):
-        """ manually initialize pattern """
-        # bad way initization
-        self.perm = [0]*model.nhypo
-        self.perm[0] = model.allPermSet[0:2]
-        self.perm[1] = model.allPermSet[2:4]
-        self.perm[2] = model.allPermSet[0:6]
+    def __init__(self, perm):
+        self.max_mode = "softmax"
+        self.alpha = 10
+        self.look_ahead = "one-step"
+
+        """ Input should have the form: perm[ihypo][iconfig] """
+        self.perm = perm
+        # manual input
+        # allPermSet = genMasterPermSet()
+        # self.perm = [0]*model.nhypo
+        # self.perm[0] = model.allPermSet[0:2]
+        # self.perm[1] = model.allPermSet[2:4]
+        # self.perm[2] = model.allPermSet[0:6]
         # self.perm[3] = model.allPermSet[0:4] + model.allPermSet[6:14]
         self.nperm = [len(p) for p in self.perm]
 
@@ -148,10 +149,19 @@ class model:
         # self.nUniPerm = self.nperm[3]
         # self.permId = model.idPerm4NR(self)
 
-        # for case without NR
-        self.uniPerm = model.allPermSet
+        self.uniPerm = permSet(perm)
         self.nUniPerm = len(self.uniPerm)
         self.permId = model.idPerm(self) #usage:[ihypo][iconfig]
+
+    def change_mode(self, max_mode, alpha, look_ahead):
+        self.max_mode = max_mode
+        self.alpha = alpha
+        self.look_ahead = look_ahead
+
+    @staticmethod
+    def check_perm_length(perm):
+        if len(perm) != model.nhypo:
+            raise ValueError("length of perm must be", model.nhypo)
 
     def idPerm(self):
         """ assign an id to each permutation relative to unique perm"""
@@ -324,6 +334,7 @@ class model:
                 score[probex] += predPy*model.objective(oldPostHypo, newPostHypo, mode)
         return score
 
+
     @staticmethod
     def objective(oldPost, newPost, mode):
         if mode is 'prob_gain':
@@ -334,6 +345,13 @@ class model:
             return newPost.max()
         elif mode is 'info_max':
             return entropy(oldPost) - entropy(newPost)
+
+
+    def get_hypoProbeMatrix(self, postJoint, probeX):
+        hypoProbeM = model.initHypoProbeMatrix(self, postJoint, probeX)
+        hypoProbeM = model.iterate_til_converge(self, postJoint, hypoProbeM, probeX)
+        return hypoProbeM
+
 
     def initHypoProbeMatrix(self, postJoint, probeX):
         """ initialize hypothesis-probe matrix with expected updated hyothesis posterior """
@@ -377,26 +395,40 @@ class model:
                     newM[ihypo,probex] += predPy*newPostHypo[ihypo]
         return newM
 
-    # refactor: the 4 functions below repeat each other a lot
-    @staticmethod
-    def iterateNorSimple(hypoProbeM, postHypo, alpha):
+
+    def iterate_once(self, postJoint, hypoProbeM, probeX):
         M = deepcopy(hypoProbeM)
-        M = np.power(M, alpha)
-        M = normalizeRow(M) # teacher's normalization
-        M = M * postHypo[:, np.newaxis]
-        M = normalizeCol(M)
+
+        if (self.max_mode == "softmax"):
+            M = np.power(M, self.alpha)
+        elif (self.max_mode == "hardmax"):
+            M = max_thresh_row(M)
+
+        M = normalizeRow(M) # teacher's normalization along probe
+
+        if (self.look_ahead == "one-step"):
+            M = model.updateHypoProbeMatrix(self, postJoint, M, probeX)
+        elif (self.look_ahead == "zero-step"):
+            postHypo = model.posteriorHypo(postJoint)
+            M = M*postHypo[:, np.newaxis]
+
+        M = normalizeCol(M) # normalization along hypo
+
         return M, np.array_equal(hypoProbeM, M)
 
-    @staticmethod
-    def iterSimpleTilConverge(hypoProbeM, postHypo, alpha):
-        maxIter = 14
+
+    def iterate_til_converge(self, postJoint, hypoProbeM, probeX):
+        if (self.max_mode == "hardmax"):
+            maxIter = 3
+        elif (self.max_mode == "softmax"):
+            if (self.look_ahead == "one-step"):
+                maxIter = 15
+            elif (self.look_ahead =="zero-step"):
+                maxIter = 30
         count = 0
         stopFlag = False
-        hypoProbeM, stopFlag = model.iterateNorSimple(
-            hypoProbeM, postHypo, alpha)
         while (not stopFlag):
-            hypoProbeM, stopFlag = model.iterateNorSimple(
-                hypoProbeM, postHypo, alpha)
+            hypoProbeM, stopFlag = model.iterate_once(self, postJoint, hypoProbeM, probeX)
             count += 1
             print('Iter at step %s' %(count))
             if count==maxIter:
@@ -404,32 +436,24 @@ class model:
                 break
         return hypoProbeM
 
-    def iterateNor(self, postJoint, hypoProbeM, probeX, alpha):
-        M = deepcopy(hypoProbeM)
-        M = np.power(M, alpha)
-        M = normalizeRow(M) # teacher's normalization
-        M = model.updateHypoProbeMatrix(self, postJoint, M, probeX)
-        M = normalizeCol(M)
-        return M, np.array_equal(hypoProbeM, M)
-
-    def iterTilConverge(self, postJoint, hypoProbeM, probeX, alpha):
-        maxIter = 7
-        count = 0
-        stopFlag = False
-        hypoProbeM, stopFlag = model.iterateNor(self,
-            postJoint, hypoProbeM, probeX, alpha)
-        while (not stopFlag):
-            hypoProbeM, stopFlag = model.iterateNor(self,
-                postJoint, hypoProbeM, probeX, alpha)
-            count += 1
-            print('Iter at step %s' %(count))
-            if count==maxIter:
-                print('maxIter reached but not converged yet')
-                break
-        return hypoProbeM
 
     @staticmethod
     def teachingChoice(hypoProbeM, ihypo):
-        x = randDistreteSample(normalize(hypoProbeM[ihypo,:]))
-        probXHypo = hypoProbeM[:,x]
+        M = hypoProbeM + 1e-6
+        x = randDiscreteSample(normalize(M[ihypo,:]))
+        probXHypo = normalize(M[:,x])
         return x, probXHypo
+
+
+def initialize_model(mode="simple"):
+    perm_set = genMasterPermSet()
+    perm = [0]*3
+    if (mode == "simple"):
+        perm[0] = perm_set[0:2]
+        perm[1] = perm_set[2:4]
+        perm[2] = perm_set[0:6]
+    elif (mode == "full"):
+        perm[0] = perm_set[0:2] + perm_set[6:10]
+        perm[1] = perm_set[2:4] + perm_set[10:14]
+        perm[2] = perm_set[0:6]
+    return model(perm)

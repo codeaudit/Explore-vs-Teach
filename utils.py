@@ -35,6 +35,20 @@ def normalizeCol(M):
             M[:,icol] = normalize(M[:,icol])
     return M
 
+def max_thresh_row(M):
+    nrow = M.shape[0]
+    for irow in range(nrow):
+        if M[irow,:].sum()>0:
+            M[irow,:] = max_threshold(M[irow,:])
+    return M
+
+def max_thresh_col(M):
+    ncol = M.shape[1]
+    for icol in range(ncol):
+        if M[:,icol].sum()>0:
+            M[:,icol] = max_threshold(M[:,icol])
+    return M
+
 def uniformSampleMaxInd(vec):
     norVec = normalize((vec==vec.max()).astype(float))
     return randDistreteSample(norVec)
@@ -54,6 +68,16 @@ def normalize(vec):
     else:
         return vec/nor
 
+def max_threshold(vec):
+    max_val = max(vec)
+    out_vec = []
+    for i, ele in enumerate(vec):
+        if ele == max_val:
+            out_vec.append(max_val)
+        else:
+            out_vec.append(0.)
+    return out_vec
+
 def randomNor(n):
     randVec = np.random.rand(n)
     return normalize(randVec)
@@ -64,7 +88,7 @@ def perturbDistr(distr, scale):
     noise = scale*np.random.rand(n)
     return normalize(distr + noise)
 
-def randDistreteSample(probVec):
+def randDiscreteSample(probVec):
     r = np.random.rand()
     cumProb = np.cumsum(probVec)
     ans = np.where(cumProb > r)
