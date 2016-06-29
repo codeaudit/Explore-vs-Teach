@@ -1,3 +1,5 @@
-[TYPECHECK]
+[MESSAGES CONTROL]
+--disable=C
 
+[TYPECHECK]
 ignored-modules = numpy

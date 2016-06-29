@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 
 from copy import deepcopy
 
-from e_vs_t import genMasterPermSet
-from e_vs_t import initialize_model
+from utils_pattern import genMasterPermSet
 
 from utils import normalizeRow
 from utils import normalizeCol
@@ -30,8 +29,7 @@ def overlayX(X):
     plt.hold(False)
 
 
-def vis_master_perm_set():
-    perm_set = genMasterPermSet()
+def vis_perm_set(perm_set):
     n = len(perm_set)
     ncols = 6
     nrows = np.ceil(n/6)
@@ -43,52 +41,44 @@ def vis_master_perm_set():
     plt.show()
 
 
-def vis_config():
-    teacher = initialize_model("full")
-
-    nhypo = teacher.nhypo
-    nperm = np.array([teacher.nperm[i] for i in range(nhypo)])
+def vis_config(person):
+    nhypo = person.nhypo
+    nperm = np.array([person.nperm[i] for i in range(nhypo)])
     for ihypo in range(nhypo):
         for iconfig in range(nperm[ihypo]):
             if (nperm.max() > 12):
                 raise ValueError("Too many configuration to plot")
             ax = plt.subplot(nhypo, nperm.max(), ihypo*nperm.max() + iconfig + 1)
-            plot4x4(teacher.perm[ihypo][iconfig])
+            plot4x4(person.perm[ihypo][iconfig])
             ax.set_xticks([])
             ax.set_yticks([])
             # print('hypo=%s, config=%s, pattern=%s'
-            #     %(ihypo, iconfig, teacher.perm[ihypo][iconfig]))
+            #     %(ihypo, iconfig, person.perm[ihypo][iconfig]))
     plt.show()
 
 
-def vis_hypo(ihypo, iconfig):
-    teacher = initialize_model()
+def vis_hypo(person, ihypo, iconfig):
 
-    # ihypo = randDistreteSample(teacher.priorHypo)
-    # iconfig = randDistreteSample(teacher.priorLabelGivenHypo[ihypo])
     print('hypo=%s, config=%s' %(ihypo, iconfig))
 
     X = np.random.permutation(np.arange(16))
-    Y = [teacher.gety(teacher.perm[ihypo][iconfig], X[i])
+    Y = [person.gety(person.perm[ihypo][iconfig], X[i])
          for i in range(len(X))]
     # print("Probed locations:", X)
     # print("Probed labels:", Y)
 
-    teacher.postJoint = teacher.posteriorJoint(X,Y)
-    teacher.postHypo = teacher.posteriorHypo(teacher.postJoint)
-    print("P(h|D) = ", teacher.postHypo)
+    person.postJoint = person.posteriorJoint(X,Y)
+    person.postHypo = person.posteriorHypo(person.postJoint)
+    print("P(h|D) = ", person.postHypo)
 
-    vals = teacher.getPossPostVals()
+    vals = person.getPossPostVals()
     print("Possible values for P(h|D):", vals)
-    plt.bar(np.arange(teacher.nhypo), teacher.postHypo)
-    plotHorLines(vals, [0,teacher.nhypo])
+    plt.bar(np.arange(person.nhypo), person.postHypo)
+    plotHorLines(vals, [0,person.nhypo])
     plt.show()
 
 
-def vis_predict(ihypo, iconfig):
-    learner = initialize_model()
-    print("Done model assignment.")
-
+def vis_predict(learner, ihypo, iconfig):
     X = np.arange(16)
     Y = [learner.gety(learner.perm[ihypo][iconfig], X[i])
          for i in range(len(X))]
@@ -126,35 +116,27 @@ def vis_predict(ihypo, iconfig):
     plt.show()
 
 
-def vis_hypoProbeMatrix(ihypo, iconfig):
-    teacher = initialize_model("full")
+def vis_hypoProbeMatrix(person, Xd, Yd):
 
     Xfull = np.arange(16)
-    print('hypo=%s, iconfig=%s' %(ihypo, iconfig))
-    Yfull = [teacher.gety(teacher.perm[ihypo][iconfig], Xfull[i])
-         for i in range(len(Xfull))]
-    Xd = Xfull[:1]
-    Yd = Yfull[:1]
-    print('probe location = %s' %(Xd))
     probeX = np.delete(Xfull, Xd)
+    person.postJoint = person.posteriorJoint(Xd, Yd)
+    hypoProbeM = person.initHypoProbeMatrix(person.postJoint, probeX)
 
-    teacher.postJoint = teacher.posteriorJoint(Xd, Yd)
-    hypoProbeM = teacher.initHypoProbeMatrix(teacher.postJoint, probeX)
-
-    n_step = 4
+    n_step = 2
     for i in range(n_step):
         print("iteration %s" %(i))
-        hypoProbeM = vis_iterateNor(teacher, hypoProbeM, probeX)
+        hypoProbeM = vis_iterateNor(person, hypoProbeM, probeX)
         plt.show()
 
 
 def vis_iterateNor(person, hypoProbeM, probeX):
     nTrans = 5
-    alpha = 10
 
     M = deepcopy(hypoProbeM)
-    ax =plt.subplot(1,nTrans,1)
-    plt.imshow(M.transpose(), interpolation="nearest", cmap="gray")
+    ax = plt.subplot(1,nTrans,1)
+    M0 = deepcopy(M)
+    plt.imshow(M0.transpose(), interpolation="none", cmap="gray")
     ax.set_title('input M')
 
     # M = np.power(M, alpha)

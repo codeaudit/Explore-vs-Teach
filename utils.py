@@ -51,7 +51,7 @@ def max_thresh_col(M):
 
 def uniformSampleMaxInd(vec):
     norVec = normalize((vec==vec.max()).astype(float))
-    return randDistreteSample(norVec)
+    return randDiscreteSample(norVec)
 
 def makeZero(vec, inds):
     vec[inds] = 0
@@ -93,3 +93,9 @@ def randDiscreteSample(probVec):
     cumProb = np.cumsum(probVec)
     ans = np.where(cumProb > r)
     return ans[0][0]
+
+def is_alist_in_lili(alist, lili):
+    for li in lili:
+        if li == alist:
+            return True
+    return False
