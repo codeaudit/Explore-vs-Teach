@@ -11,7 +11,7 @@ from simulate import perf_all_learner_configs
 def setup_test_hypo(guy):
     """ test P(h|X,Y) for initialize_model("full") """
     possible_val = guy.getPossPostVals()
-    x_full = guy.x
+    x_full = np.arange(guy.nx)
     for ihypo in range(guy.nhypo):
         for iconfig in range(guy.nperm[ihypo]):
             perm = guy.perm[ihypo][iconfig]

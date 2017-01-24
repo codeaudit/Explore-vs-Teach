@@ -13,13 +13,15 @@ def normalizeLili(Lili):
         return norLili
 
 def flatten(L):
-    '''Flattens nested lists or tuples with non-string items'''
-    for item in L:
-        try:
-            for i in flatten(item):
-                yield i
-        except TypeError:
-            yield item
+    # """ Flattens nested lists or tuples with non-string items.
+    #     I think this is too slow. """
+    # for item in L:
+    #     try:
+    #         for i in flatten(item):
+    #             yield i
+    #     except TypeError:
+    #         yield item
+    return [item for sublist in L for item in sublist]
 
 def normalizeRow(M):
     nrow = M.shape[0]
@@ -39,7 +41,9 @@ def max_thresh_row(M):
     nrow = M.shape[0]
     for irow in range(nrow):
         if M[irow,:].sum()>0:
+            # print("before:", M[irow,:])
             M[irow,:] = max_threshold(M[irow,:])
+            # print("after:", M[irow,:])
     return M
 
 def max_thresh_col(M):
@@ -50,7 +54,10 @@ def max_thresh_col(M):
     return M
 
 def uniformSampleMaxInd(vec):
-    norVec = normalize((vec==vec.max()).astype(float))
+    vec_max = np.ones_like(vec)*vec.max()
+    vec_bool = np.isclose(vec, vec_max)
+    norVec = normalize(vec_bool.astype(float))
+    # norVec = normalize((vec == vec.max()).astype(float)) #bad ==
     return randDiscreteSample(norVec)
 
 def makeZero(vec, inds):
@@ -58,6 +65,7 @@ def makeZero(vec, inds):
     return vec
 
 def normalize(vec):
+    #Is this bad to change type of output?
     vec = np.array(vec)
     nor = vec.sum()
     if nor <= 0:
@@ -71,11 +79,11 @@ def normalize(vec):
 def max_threshold(vec):
     max_val = max(vec)
     out_vec = []
-    for i, ele in enumerate(vec):
-        if ele == max_val:
-            out_vec.append(max_val)
-        else:
+    for ele in vec:
+        if max_val - ele > 1e-10:
             out_vec.append(0.)
+        else:
+            out_vec.append(max_val)
     return out_vec
 
 def randomNor(n):

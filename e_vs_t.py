@@ -10,11 +10,10 @@ from utils import normalizeRow
 from utils import normalizeCol
 from utils import max_thresh_row
 from utils import randDiscreteSample
+from utils import uniformSampleMaxInd
 
-from utils_pattern import NRConfiguration
 from utils_pattern import findIndexPerm
 from utils_pattern import permSet
-from utils_pattern import genMasterPermSet
 
 import numpy as np
 
@@ -31,8 +30,7 @@ to skip hypo, because we eventually want P(x|h).
 class model:
     """ define a person's hypothesis space and hierarchical prior probability """
     nhypo = 0 #4
-    x = np.arange(16)
-    nx = len(x)
+    nx = 0 # used
 
     def __init__(self, perm):
         """ Input should have the form: perm[ihypo][iconfig] """
@@ -42,11 +40,10 @@ class model:
 
         self.perm = perm
         model.nhypo = len(perm)
+        model.nx = len(perm[0][0])
         self.nperm = [len(p) for p in self.perm]
 
-        model.initPriorHypo(self)
-        model.initPriorLabelGivenHypo(self) #usage:[ihypo][iconfig]
-        model.initPosteriorJoint(self) #usage:[ihypo][iconfig]
+        model.initialize(self)
 
         self.uniPerm = permSet(perm)
         self.nUniPerm = len(self.uniPerm)
@@ -81,6 +78,11 @@ class model:
         possVals = flatten(post)
         return set(possVals)
 
+    def initialize(self):
+        model.initPriorHypo(self)
+        model.initPriorLabelGivenHypo(self) #usage:[ihypo][iconfig]
+        model.initPosteriorJoint(self) #usage:[ihypo][iconfig]
+
     def initPriorHypo(self):
         """ initialize prior over hypothesis """
         self.priorHypo = np.ones(model.nhypo)/model.nhypo
@@ -114,7 +116,7 @@ class model:
     def posteriorJoint(self, X, Y):
         """ compute posterior of label, hypo jointly given observations X and Y.
             P(h,f|D) = prod_h prod_f P(y|x,f)P(f|h)P(h) """
-        # Normalized? No. Does it matter? No, because postHypo and postLabel are
+        # Normalized? No. Does it matter? No, because postHypo and postLabel are.
         postJoint = [
             [model.likelihood(self.perm[ihypo][iconfig], X, Y)
             *self.priorLabelGivenHypo[ihypo][iconfig]
@@ -215,9 +217,9 @@ class model:
         for probex in probeX:
             yis0, yis1 = model.predicty(self.uniPerm, postLabel, probex)
             for probey in probeY:
-                if probey==0:
+                if probey == 0:
                     predPy = yis0
-                elif probey==1:
+                elif probey == 1:
                     predPy = yis1
                 newJoint = model.updatePosteriorJoint(self, [probex], [probey], postJoint)
                 newPostHypo = model.posteriorHypo(newJoint)
@@ -237,6 +239,17 @@ class model:
             return entropy(oldPost) - entropy(newPost)
 
 
+    @staticmethod
+    def explore_choice(score, probeX):
+        """ choose unvisted x with the highest score """
+        new_score = np.zeros_like(score)
+        new_score[probeX] = score[probeX]
+        if np.sum(new_score) == 0:
+            new_score[probeX] += 1
+        x = uniformSampleMaxInd(new_score)
+        return x
+
+
     def get_hypoProbeMatrix(self, postJoint, probeX):
         hypoProbeM = model.initHypoProbeMatrix(self, postJoint, probeX)
         hypoProbeM = model.iterate_til_converge(self, postJoint, hypoProbeM, probeX)
@@ -254,9 +267,9 @@ class model:
             for probex in probeX:
                 yis0, yis1 = model.predicty(self.uniPerm, postLabel, probex)
                 for probey in probeY:
-                    if probey==0:
+                    if probey == 0:
                         predPy = yis0
-                    elif probey==1:
+                    elif probey == 1:
                         predPy = yis1
                     newJoint = model.updatePosteriorJoint(self,
                                [probex], [probey], postJoint)
@@ -275,9 +288,9 @@ class model:
             for probex in probeX:
                 yis0, yis1 = model.predicty(self.uniPerm, postLabel, probex)
                 for probey in probeY:
-                    if probey==0:
+                    if probey == 0:
                         predPy = yis0
-                    elif probey==1:
+                    elif probey == 1:
                         predPy = yis1
                     update = model.updatePosteriorJointWithTeacher(self,
                              [probex], [probey], postJoint, hypoProbeM[:,probex])
@@ -287,7 +300,11 @@ class model:
 
 
     def iterate_once(self, postJoint, hypoProbeM, probeX):
+
         M = deepcopy(hypoProbeM)
+
+        # TODO: understand why different normalization order give different result!
+        M = normalizeCol(M) # normalization along hypo
 
         if (self.max_mode == "softmax"):
             M = np.power(M, self.alpha)
@@ -302,9 +319,10 @@ class model:
             postHypo = model.posteriorHypo(postJoint)
             M = M*postHypo[:, np.newaxis]
 
-        M = normalizeCol(M) # normalization along hypo
+        # flag_same = np.array_equal(hypoProbeM, M) #bad!
+        flag_same = np.allclose(hypoProbeM, M)
 
-        return M, np.array_equal(hypoProbeM, M)
+        return M, flag_same
 
 
     def iterate_til_converge(self, postJoint, hypoProbeM, probeX):
@@ -312,7 +330,7 @@ class model:
             maxIter = 3
         elif (self.max_mode == "softmax"):
             if (self.look_ahead == "one-step"):
-                maxIter = 15
+                maxIter = 50
             elif (self.look_ahead =="zero-step"):
                 maxIter = 30
         count = 0
@@ -321,7 +339,7 @@ class model:
             hypoProbeM, stopFlag = model.iterate_once(self, postJoint, hypoProbeM, probeX)
             count += 1
             # print('Iter at step %s' %(count))
-            if count==maxIter:
+            if count == maxIter:
                 print('maxIter reached but not converged yet')
                 break
         return hypoProbeM
@@ -329,8 +347,12 @@ class model:
 
     @staticmethod
     def teachingChoice(hypoProbeM, ihypo, probeX):
+        """ 2nd line injects reserve probability to
+            i) avoid contradiction with observations
+            ii) avoid revisiting when all of M = 0 """
         M = deepcopy(hypoProbeM)
-        M[:,probeX] += 1e-6 # inject reserve probability to avoid contradiction with observations
-        x = randDiscreteSample(normalize(M[ihypo,:]))
+        M[:,probeX] += 1e-6
+        # x = randDiscreteSample(normalize(M[ihypo,:])) # expect only one kind of values
+        x = uniformSampleMaxInd(M[ihypo,:])
         probXHypo = normalize(M[:,x])
         return x, probXHypo
