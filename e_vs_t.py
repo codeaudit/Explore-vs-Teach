@@ -231,12 +231,22 @@ class model:
     def objective(oldPost, newPost, mode):
         if mode is 'prob_gain':
             return np.absolute(oldPost-newPost).max()
+        elif mode is 'nelsos_prob_gain':
+            # not robust because can be negative
+            return newPost.max() - oldPost.max()
         elif mode is 'prob_total_change':
             return np.absolute(oldPost-newPost).sum()
         elif mode is 'prob_max':
             return newPost.max()
         elif mode is 'info_max':
-            return entropy(oldPost) - entropy(newPost)
+            # FIXME: infs and negatives
+            value = entropy(oldPost) - entropy(newPost)
+            if value < 0: # this happens when XXX
+                value = 0.
+            if np.isinf(value): # happens for counterfactual Post =[0,0,0,0]
+                value = 0.
+            # print("value =", value)
+            return value
 
 
     @staticmethod
@@ -244,8 +254,9 @@ class model:
         """ choose unvisted x with the highest score """
         new_score = np.zeros_like(score)
         new_score[probeX] = score[probeX]
-        if np.sum(new_score) == 0:
+        if np.isclose(np.sum(new_score), 0):
             new_score[probeX] += 1
+        # print("new_score =", new_score)
         x = uniformSampleMaxInd(new_score)
         return x
 

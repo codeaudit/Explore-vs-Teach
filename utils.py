@@ -97,6 +97,7 @@ def perturbDistr(distr, scale):
     return normalize(distr + noise)
 
 def randDiscreteSample(probVec):
+    # print("randDiscreteSample input:", probVec)
     r = np.random.rand()
     cumProb = np.cumsum(probVec)
     ans = np.where(cumProb > r)
