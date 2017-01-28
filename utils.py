@@ -108,3 +108,9 @@ def is_alist_in_lili(alist, lili):
         if li == alist:
             return True
     return False
+
+def smaller_anywhere(a, b):
+    for i in range(len(a)):
+        if b[i] - a[i] > 1e-10:
+            return True
+    return False

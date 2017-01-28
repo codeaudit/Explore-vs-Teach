@@ -6,6 +6,7 @@ from utils import normalize
 from utils import uniformSampleMaxInd
 from utils import perturbDistr
 from utils import is_alist_in_lili
+from utils import smaller_anywhere
 
 from vis_utils import plot_nbyn
 from vis_utils import overlayX
@@ -287,6 +288,7 @@ def perf_space(master_set, nhypo, n_overlap, max_step, mode):
         loop through different concept-pattern spaces. """
     perf_data = []
     perf_avg_data = []
+    person_spaces = []
     n_pattern = int(len(master_set)) # or for paired: = int(len(master_set)/2)
     for count, hypo_indicator in enumerate(iter_hypo_indicator(nhypo, n_pattern, n_overlap)):
         hypo = build_hypo(hypo_indicator, nhypo)
@@ -296,9 +298,10 @@ def perf_space(master_set, nhypo, n_overlap, max_step, mode):
         perfs, perf_avg = perf_all_configs(person, max_step, mode)
         perf_data.append(perfs)
         perf_avg_data.append(perf_avg)
+        person_spaces.append(hypo)
         print("Going through space %d: %s" %(count, hypo))
     # np.save("perf", perf)
-    return perf_data, perf_avg_data
+    return perf_data, perf_avg_data, person_spaces
 
 
 def extract_perms(person):
@@ -348,6 +351,8 @@ def perf_space_product(master_set, nhypo, n_overlap, max_step, mode):
     perf_explo_data = []
     perf_inter_data = []
     factor_data = []
+    learner_spaces = []
+    teacher_spaces = []
     num_swap = []
     count = 0
     n_pattern = int(len(master_set)) # or for paired: = int(len(master_set)/2)
@@ -369,12 +374,14 @@ def perf_space_product(master_set, nhypo, n_overlap, max_step, mode):
                 n_swap = len(set_lili_diff(hypo_i, hypo_j))
                 num_swap.append(n_swap)
                 perfs_explo, perfs_inter, factors = perf_shared_configs(learner, teacher, max_step, mode)
+                learner_spaces.append(hypo_i)
+                teacher_spaces.append(hypo_j)
                 perf_explo_data.append(perfs_explo)
                 perf_inter_data.append(perfs_inter)
                 factor_data.append(factors)
                 print("Interacting %d-%d-%d: %s x %s. Number of swaps = %d." %(i, j, count, hypo_i, hypo_j, n_swap))
                 count += 1
-    return perf_explo_data, perf_inter_data, factor_data, num_swap
+    return perf_explo_data, perf_inter_data, factor_data, num_swap, learner_spaces, teacher_spaces
 
 
 def plot_unique_perf(x, perf_data, style):
@@ -395,7 +402,7 @@ def plot_unique_perf(x, perf_data, style):
     plt.savefig('result.pdf')  # or just plt.show()
 
 
-def simulate_overlap():
+def simulate_overlap(data_name):
     """ Level 4:
         loop of perf_space(),
         loop through parameters that define spaces. """
@@ -407,50 +414,29 @@ def simulate_overlap():
     save_e_avgs = []
     save_t_data = []
     save_t_avgs = []
-    plt.figure(figsize=(6,6))
-    plt.hold(True)
+    save_person_spaces = []
     for n_overlap in range(7):
-        e_data, e_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "explore")
-        t_data, t_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "teach")
+        e_data, e_avgs, person_spaces = perf_space(master_set, nhypo, n_overlap, max_step, "explore")
+        t_data, t_avgs, _ = perf_space(master_set, nhypo, n_overlap, max_step, "teach")
         save_e_data.append(e_data)
         save_t_data.append(t_data)
         save_e_avgs.append(e_avgs)
         save_t_avgs.append(t_avgs)
-        #
-        for ispace, t_space in enumerate(t_data):
-            for iconfig, t_perf in enumerate(t_space):
-                e_perf = e_data[ispace][iconfig]
-                if smaller_anywhere(t_perf, e_perf):
-                    print("space %d - pattern %d" %(ispace, iconfig))
-            #     plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
-            #     plt.plot(e_perf[-1], t_perf[-1], 'r.', alpha=.1)
-            # plt.plot(e_avgs[ispace], t_avgs[ispace], 'b-', linewidth=1, alpha=.3)
-        #
-        plt.plot(np.mean(e_avgs, axis=0), np.mean(t_avgs, axis=0), linewidth=2)
-    plt.plot([0,1], [0,1], 'k:', alpha=.5)
-    plt.hold(False)
-    plt.xlim([-0.01, 1.01])
-    plt.ylim([-0.01, 1.01])
-    plt.xticks(fontsize = 20)
-    plt.yticks(fontsize = 20)
-    plt.xlabel("Exploration performance", fontsize=20)
-    plt.ylabel("Teaching performance", fontsize=20)
-    plt.savefig('result.pdf')  # or just plt.show()
-    np.savez('sim_overlap', e_data_vec=save_e_data, t_data_vec=save_t_data,
-                            e_avgs_vec=save_e_avgs, t_avgs_vec=save_t_avgs,
-                            master_set=master_set, nhypo=nhypo,
-                            max_step=max_step,x=x)
+        save_person_spaces.append(person_spaces)
+    np.savez(data_name, e_data_vec=save_e_data, t_data_vec=save_t_data,
+                        e_avgs_vec=save_e_avgs, t_avgs_vec=save_t_avgs,
+                        master_set=master_set, nhypo=nhypo,
+                        max_step=max_step, x=x,
+                        person_spaces_vec=save_person_spaces)
 
 
-def plot_overlap(path):
-    # FIXME
-    """ redundant codes shared with simulate_overlap() """
-    npzfile = np.load(path)
-    e_data_vec = npzfile['e_data_vec']
-    t_data_vec = npzfile['t_data_vec']
-    e_avgs_vec = npzfile['e_avgs_vec']
-    t_avgs_vec = npzfile['t_avgs_vec']
-    plt.figure(figsize=(6,6))
+def plot_overlap(overlap_data, fig_name):
+    """ Level 4: plot function for simulate_overlap() """
+    e_data_vec = overlap_data['e_data_vec']
+    t_data_vec = overlap_data['t_data_vec']
+    e_avgs_vec = overlap_data['e_avgs_vec']
+    t_avgs_vec = overlap_data['t_avgs_vec']
+    plt.figure(figsize=(4,4))
     plt.hold(True)
     for n_overlap in range(7):
         x = np.mean(e_avgs_vec[n_overlap], axis=0)
@@ -460,53 +446,41 @@ def plot_overlap(path):
     plt.hold(False)
     plt.xlim([-0.01, 1.01])
     plt.ylim([-0.01, 1.01])
-    plt.xticks(fontsize = 20)
-    plt.yticks(fontsize = 20)
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
     plt.xlabel("Exploration performance", fontsize=20)
     plt.ylabel("Teaching performance", fontsize=20)
-    plt.savefig('result.pdf', bbox_inches='tight')  # or just plt.show()
+    plt.savefig(fig_name, bbox_inches='tight')  # or just plt.show()
 
 
-def smaller_anywhere(a, b):
-    for i in range(len(a)):
-        if b[i] - a[i] > 1e-10:
-            return True
-    return False
-
-
-def simulate_nhypo():
-    """ Level 4:
-        loop of perf_space(),
-        loop through parameters that define spaces. """
-    master_set = genMasterPermSet2x2()
-    n_overlap = 0
-    max_step = 4
-    x = np.arange(max_step)
-    plt.figure(figsize=(6,6))
-    plt.hold(True)
-    for nhypo in range(2,7):
-        e_data, e_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "explore")
-        t_data, t_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "teach")
+def stats_overlap(overlap_data):
+    """ Level 4: extract stats from simulate_overlap() """
+    e_avgs_vec = overlap_data['e_avgs_vec']
+    t_avgs_vec = overlap_data['t_avgs_vec']
+    person_spaces_vec = overlap_data['person_spaces_vec']
+    print("Teaching ends up worse than exploration (averaged over a concept space) when:")
+    for n_overlap, t_avgs in enumerate(t_avgs_vec):
+        for ispace, t_avg in enumerate(t_avgs):
+            e_avg = e_avgs_vec[n_overlap][ispace]
+            if t_avg[-1] < e_avg[-1]:
+                hypo = person_spaces_vec[n_overlap][ispace]
+                print("overlap %d-space %d: %s" %(n_overlap, ispace, hypo))
+        #
+        # leftover stats/plot code from before
         # for ispace, t_space in enumerate(t_data):
         #     for iconfig, t_perf in enumerate(t_space):
         #         e_perf = e_data[ispace][iconfig]
         #         if smaller_anywhere(t_perf, e_perf):
         #             print("space %d - pattern %d" %(ispace, iconfig))
-        #         plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
-        #         plt.plot(e_perf[-1], t_perf[-1], 'r.', alpha=.1)
-        #     plt.plot(e_avgs[ispace], t_avgs[ispace], 'b-', linewidth=1, alpha=.3)
-        plt.plot(np.mean(e_avgs, axis=0), np.mean(t_avgs, axis=0), linewidth=1)
-    plt.plot([0,1], [0,1], 'k:', alpha=.5)
-    plt.hold(False)
-    plt.xlim([-0.01, 1.01])
-    plt.ylim([-0.01, 1.01])
-    plt.xlabel("Exploration performance", fontsize=20)
-    plt.ylabel("Teaching performance", fontsize=20)
-    plt.savefig('result.pdf')  # or just plt.show()
+            #     plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
+            #     plt.plot(e_perf[-1], t_perf[-1], 'r.', alpha=.1)
+            # plt.plot(e_avgs[ispace], t_avgs[ispace], 'b-', linewidth=1, alpha=.3)
+        #
 
 
 def avg_over_space(perf_data, factor_data, max_step):
-    """ input data has 3 layers [ispace][iconfig][step]
+    """ Used in simulate_swap()
+        input data has 3 layers [ispace][iconfig][step]
         output data has 2 layers [ispace][step] """
     perfs_avg = []
     for ispace, perfs in enumerate(perf_data):
@@ -517,41 +491,39 @@ def avg_over_space(perf_data, factor_data, max_step):
     return perfs_avg
 
 
-def simulate_swap():
-    mode = "bad_teacher"
+def simulate_swap(mode, data_name):
+    """ Level 3: wrapper for perf_space_product """
     master_set = genMasterPermSet2x2()
     nhypo = 2
     n_overlap = 1
     max_step = 4
-    explo_data, inter_data, factors, num_swap = perf_space_product(master_set,
-                                            nhypo, n_overlap, max_step, mode)
+    explo_data, inter_data, factors, num_swap, learner_spaces, teacher_spaces = perf_space_product(master_set, nhypo, n_overlap, max_step, mode)
     explo_avgs = avg_over_space(explo_data, factors, max_step)
     inter_avgs = avg_over_space(inter_data, factors, max_step)
     x = np.arange(max_step)
-    np.savez("sim_swap_bad_teacher", master_set=master_set, nhypo=nhypo,
+    np.savez(data_name, master_set=master_set, nhypo=nhypo,
                          n_overlap=n_overlap, max_step=max_step,
                          explo_data=explo_data, inter_data=inter_data,
                          explo_avgs=explo_avgs, inter_avgs=inter_avgs,
-                         factors=factors, num_swap=num_swap, x=x)
+                         factors=factors, num_swap=num_swap, x=x,
+                         learner_spaces=learner_spaces, teacher_spaces=teacher_spaces)
 
 
-def plot_swap(path_name, save_name):
-    npzfile = np.load(path_name)
-    master_set = npzfile['master_set']
-    nhypo = npzfile['nhypo']
-    n_overlap = npzfile['n_overlap']
-    max_step = npzfile['max_step']
-    explo_data = npzfile['explo_data']
-    inter_data = npzfile['inter_data']
-    explo_avgs = npzfile['explo_avgs']
-    inter_avgs = npzfile['inter_avgs']
-    factors = npzfile['factors']
-    num_swap = npzfile['num_swap']
-    x = npzfile['x']
-
-    plt.figure(figsize=(6,6))
+def plot_swap(swap_data, fig_name):
+    """ Level 3: plotting function for simulate_swap() """
+    master_set = swap_data['master_set']
+    nhypo = swap_data['nhypo']
+    n_overlap = swap_data['n_overlap']
+    max_step = swap_data['max_step']
+    explo_data = swap_data['explo_data']
+    inter_data = swap_data['inter_data']
+    explo_avgs = swap_data['explo_avgs']
+    inter_avgs = swap_data['inter_avgs']
+    factors = swap_data['factors']
+    num_swap = swap_data['num_swap']
+    x = swap_data['x']
+    plt.figure(figsize=(4,4))
     plt.hold(True)
-
     for i_swap in range(max(num_swap)+1):
         count = 0
         explo_avg_swap = np.zeros(max_step)
@@ -562,7 +534,7 @@ def plot_swap(path_name, save_name):
                 explo_avg_swap += explo_avgs[ind]
                 inter_avg_swap += inter_avgs[ind]
         plt.plot(explo_avg_swap/count, inter_avg_swap/count, linewidth=2)
-
+    #
     # end_point_set = []
     # for ispace, t_space in enumerate(inter_data):
     #     for iconfig, t_perf in enumerate(t_space):
@@ -578,18 +550,112 @@ def plot_swap(path_name, save_name):
             #     plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
         # plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
         # plt.plot(e_avgs[ispace], t_avgs[ispace], 'b-', linewidth=1, alpha=.3)
-
+    #
     plt.plot([0,1], [0,1], 'k:', alpha=.5)
     plt.hold(False)
     plt.xlim([-0.01, 1.01])
     plt.ylim([-0.01, 1.01])
-    plt.xticks(fontsize = 20)
-    plt.yticks(fontsize = 20)
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
     plt.xlabel("Exploration performance", fontsize=20)
     plt.ylabel("Teaching performance", fontsize=20)
-    plt.savefig(save_name, bbox_inches='tight')  # or just plt.show()
+    plt.savefig(fig_name, bbox_inches='tight')  # or just plt.show()
 
 
+def stats_swap(swap_data):
+    """ Level 3: stats for simulate_swap() """
+    master_set = swap_data['master_set']
+    nhypo = swap_data['nhypo']
+    n_overlap = swap_data['n_overlap']
+    explo_data = swap_data['explo_data']
+    inter_data = swap_data['inter_data']
+    # explo_avgs = npzfile['explo_avgs']
+    # inter_avgs = npzfile['inter_avgs']
+    learner_spaces = swap_data['learner_spaces']
+    teacher_spaces = swap_data['teacher_spaces']
+    print("Conditions under which extremes happen (for a pattern in a concept space):")
+    for ispace, t_space in enumerate(inter_data):
+        for iconfig, t_perf in enumerate(t_space):
+            e_perf = explo_data[ispace][iconfig]
+            if (t_perf[-1] < 0.4 and e_perf[-1] > 0.6):
+                print("exploration BETTER than teaching: space %d - pattern %d" %(ispace, iconfig))
+                print("learner: %s x teacher: %s." %(learner_spaces[ispace], teacher_spaces[ispace]))
+            if (t_perf[-1] > 0.6 and e_perf[-1] < 0.4):
+                print("exploration WORSE than teaching: space %d - pattern %d" %(ispace, iconfig))
+                print("learner: %s x teacher: %s." %(learner_spaces[ispace], teacher_spaces[ispace]))
+
+
+def example_performances_plots():
+    plt.clf()
+    plt.figure(figsize=(4,4))
+    plt.hold(True)
+    plt.plot([0,1], [0,1], 'k:', alpha=.5)
+    plt.plot([.5, .75, .5], [.5, .75, 1], 'r-',  linewidth=2)
+    plt.hold(False)
+    plt.xlim([-0.01, 1.01])
+    plt.ylim([-0.01, 1.01])
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
+    plt.xlabel("Exploration performance", fontsize=20)
+    plt.ylabel("Teaching performance", fontsize=20)
+    plt.savefig("empty_double_perf.pdf", bbox_inches='tight')
+    plt.clf()
+    plt.figure(figsize=(4,4))
+    plt.plot([0, 2, 3], [.5, 1, 1], 'r-', linewidth=2)
+    plt.xlim([-0.01, 3.01])
+    plt.xticks([0,1,2,3], ['0','1','2','3'])
+    plt.ylim([-0.01, 1.01])
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
+    plt.xlabel("Number of observations", fontsize=20)
+    plt.ylabel("Teaching performance", fontsize=20)
+    plt.savefig("empty_teach_perf.pdf", bbox_inches='tight')
+    plt.clf()
+    plt.figure(figsize=(4,4))
+    plt.plot([0, 1, 2, 3], [.5, .75, .5, .5], 'r-', linewidth=2)
+    plt.xticks([0,1,2,3], ['0','1','2','3'])
+    plt.xlim([-0.01, 3.01])
+    plt.ylim([-0.01, 1.01])
+    plt.xticks(fontsize = 15)
+    plt.yticks(fontsize = 15)
+    plt.xlabel("Number of observations", fontsize=20)
+    plt.ylabel("Exploration performance", fontsize=20)
+    plt.savefig("empty_explore_perf.pdf", bbox_inches='tight')
+
+
+# FIXME: calling outdated functons
+# def simulate_nhypo():
+#     """ Level 4:
+#         loop of perf_space(),
+#         loop through parameters that define spaces. """
+#     master_set = genMasterPermSet2x2()
+#     n_overlap = 0
+#     max_step = 4
+#     x = np.arange(max_step)
+#     plt.figure(figsize=(6,6))
+#     plt.hold(True)
+#     for nhypo in range(2,7):
+#         e_data, e_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "explore")
+#         t_data, t_avgs = perf_space(master_set, nhypo, n_overlap, max_step, "teach")
+#         # for ispace, t_space in enumerate(t_data):
+#         #     for iconfig, t_perf in enumerate(t_space):
+#         #         e_perf = e_data[ispace][iconfig]
+#         #         if smaller_anywhere(t_perf, e_perf):
+#         #             print("space %d - pattern %d" %(ispace, iconfig))
+#         #         plt.plot(e_perf, t_perf, 'r-', linewidth=1, alpha=.01)
+#         #         plt.plot(e_perf[-1], t_perf[-1], 'r.', alpha=.1)
+#         #     plt.plot(e_avgs[ispace], t_avgs[ispace], 'b-', linewidth=1, alpha=.3)
+#         plt.plot(np.mean(e_avgs, axis=0), np.mean(t_avgs, axis=0), linewidth=1)
+#     plt.plot([0,1], [0,1], 'k:', alpha=.5)
+#     plt.hold(False)
+#     plt.xlim([-0.01, 1.01])
+#     plt.ylim([-0.01, 1.01])
+#     plt.xlabel("Exploration performance", fontsize=20)
+#     plt.ylabel("Teaching performance", fontsize=20)
+#     plt.savefig('result.pdf')  # or just plt.show()
+
+
+# FIXME: calling outdated functions
 # def perf_space_size_mismatch(small_hypo_indicator,
 #                              master_set, nhypo, n_overlap, max_step):
 #     n_pattern = int(len(master_set)/2)
@@ -625,7 +691,7 @@ def plot_swap(path_name, save_name):
 #                 small_hypo = build_hypo(small, nhypo)
 #                 small_perm = hypo2perm(small_hypo, master_set)
 #                 small_guy = model(small_perm)
-#                 perfs = perf_shared_configs(small_guy, full_guy, max_step) #FIXME argument definition changed
+#                 perfs = perf_shared_configs(small_guy, full_guy, max_step)
 #                 perf_unique = plot_unique_perf(np.arange(max_step), perfs, perf_unique, 'r-')
 #
 #     plt.hold(False)
@@ -633,6 +699,7 @@ def plot_swap(path_name, save_name):
 #     plt.xlabel("Number of openings")
 #     plt.ylabel("Performance (prob-matching)")
 #     plt.savefig('result.png')  # or just plt.show()
+
 
 
 if __name__ == '__main__':
@@ -647,13 +714,20 @@ if __name__ == '__main__':
     # e_data, _ = perf_space(master_set, nhypo, n_overlap, max_step, "explore")
     # plot_unique_perf(np.arange(max_step), e_data, 'r-')
 
-    # simulate_overlap()
-    # path = 'sim_overlap.npz'
-    # plot_overlap(path)
-
     # simulate_nhypo()
 
-    simulate_swap()
-    path_name = 'sim_swap_bad_teacher.npz'
-    save_name = 'fig_sim_swap_bad_teacher.pdf'
-    plot_swap(path_name, save_name)
+    # simulate_overlap(data_name="test-sim_overlap")
+    overlap_data = np.load('test-sim_overlap.npz')
+    plot_overlap(overlap_data, fig_name='fig_overlap_aligned.pdf')
+    # stats_overlap(overlap_data)
+
+    # mode = "bad_teacher"  # bad_teacher or bad_learner
+    # simulate_swap(mode, data_name="test-sim_overlap_1_bad_teacher")
+    swap_data = np.load('test-sim_overlap_1_bad_learner.npz')
+    plot_swap(swap_data, fig_name='fig_overlap_1_bad_learner.pdf')
+    # stats_swap(swap_data)
+
+    swap_data = np.load('test-sim_overlap_1_bad_teacher.npz')
+    plot_swap(swap_data, fig_name='fig_overlap_1_bad_teacher.pdf')
+
+    # example_performances_plots()
