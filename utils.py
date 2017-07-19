@@ -37,6 +37,14 @@ def normalizeCol(M):
             M[:,icol] = normalize(M[:,icol])
     return M
 
+def normalizeRowin3D(M3):
+    """ M3 is a 3D array """
+    nrow = M3.shape[0]
+    for irow in range(nrow):
+        if M3[irow,:,:].sum()>0:
+            M3[irow,:,:] = normalize(M3[irow,:,:])
+    return M3
+
 def max_thresh_row(M):
     nrow = M.shape[0]
     for irow in range(nrow):

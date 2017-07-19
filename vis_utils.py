@@ -7,7 +7,7 @@ from copy import deepcopy
 from utils import normalizeRow
 from utils import normalizeCol
 from utils import max_thresh_row
-
+from utils import normalizeRowin3D
 
 def plotHorLines(vec, lim):
     plt.hold(True)
@@ -116,6 +116,8 @@ def vis_predict(learner, ihypo, iconfig):
 
     plt.show()
 
+# ###########################################################################
+# # This section follows e-vs-t-v1 (4)-(6), which may not be perfectly right
 
 def vis_hypoProbeMatrix(person, Xd, Yd):
 
@@ -181,3 +183,80 @@ def vis_iterateNor(person, hypoProbeM, probeX):
         #print('output M = %s' %(M))
 
     return M
+# ###########################################################################
+
+# ###########################################################################
+# # This section tries a new formulation, but does not produce good results
+# # The new formulation may be the one in the comments in the e-vs-t paper
+# def vis_hypoProbeObsMatrix(person, Xd, Yd):
+#
+#     Xfull = np.arange(person.nx)
+#     probeX = np.delete(Xfull, Xd)
+#     person.postJoint = person.posteriorJoint(Xd, Yd)
+#     hypoProbeObsM = person.initHypoProbeObsMatrix(person.postJoint, probeX)
+#
+#     n_step = 20
+#     for i in range(n_step):
+#         print("iteration %s" %(i))
+#         hypoProbeObsM = vis_iterateNor_v2(person, hypoProbeObsM, probeX)
+#         plt.show()
+#
+#
+# def vis_iterateNor_v2(person, hypoProbeObsM, probeX):
+#     nTrans = 5
+#
+#     # the overall sequence:
+#     # M_3 = normalizeRowin3D(M_3) # teacher's normalization along probe before marginalization
+#     # M_2 = model.predMargY(self, postJoint, M_3)
+#     # M_2 = max_thresh_row(M_2)
+#     # M_2 = normalizeRow(M_2) # normalize along probe again after predMargy
+#     # M_3 = model.updateHypoProbeObsMatrix(self, postJoint, M_2, probeX) # this function already produces hypo-normalized array
+#
+#     M = deepcopy(hypoProbeObsM)
+#     ax = plt.subplot(1,nTrans,1)
+#     M_plot1 = deepcopy(np.sum(M, axis=2))
+#     plt.imshow(M_plot1.transpose(), interpolation="none", cmap="gray")
+#     ax.set_title('input M summed over y') # should look normalized along hypo
+#
+#     M = normalizeRowin3D(M) # teacher's normalization along probe
+#     M = person.predMargY(person.postJoint, M, probeX)
+#     ax = plt.subplot(1,nTrans,2)
+#     M_plot2 = deepcopy(M)
+#     plt.imshow(M_plot2.transpose(), interpolation="nearest", cmap="gray")
+#     ax.set_title('predictive marginalization of y')
+#
+#     M = max_thresh_row(M)
+#     ax = plt.subplot(1,nTrans,3)
+#     M_plot3 = deepcopy(M)
+#     plt.imshow(M_plot3.transpose(), interpolation="nearest", cmap="gray")
+#     ax.set_title('max thresh M')
+#
+#     M = normalizeRow(M) # normalize along probe again after predMargy
+#     ax = plt.subplot(1,nTrans,4)
+#     M_plot4 = deepcopy(M)
+#     plt.imshow(M_plot4.transpose(), interpolation="nearest", cmap="gray")
+#     ax.set_title('normalize probe after max')
+#
+#     M = person.updateHypoProbeObsMatrix(person.postJoint, M, probeX)
+#     ax = plt.subplot(1,nTrans,5)
+#     M_plot5 = deepcopy(M.sum(axis=2))
+#     plt.imshow(M_plot5.transpose(), interpolation="nearest", cmap="gray")
+#     ax.set_title('update M')
+#
+#     print("input M summed over y:", M_plot1)
+#     print("predictive marginalization of y:", M_plot2)
+#     print("max thresh:", M_plot3)
+#     print("normalize probe after max:", M_plot4)
+#     print("update M:", M_plot5)
+#     print("input M:", hypoProbeObsM)
+#     print("output M:", M)
+#
+#     if np.allclose(hypoProbeObsM, M):
+#         print('Converged!')
+#     else:
+#         print('Not converging yet.')
+#         #print('input M = %s' %(hypoProbeM))
+#         #print('output M = %s' %(M))
+#
+#     return M
+# ###########################################################################

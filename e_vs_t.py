@@ -8,6 +8,7 @@ from utils import flatten
 from utils import makeZero
 from utils import normalizeRow
 from utils import normalizeCol
+from utils import normalizeRowin3D
 from utils import max_thresh_row
 from utils import randDiscreteSample
 from utils import uniformSampleMaxInd
@@ -16,6 +17,8 @@ from utils_pattern import findIndexPerm
 from utils_pattern import permSet
 
 import numpy as np
+import warnings
+
 
 """
 2016-03-10
@@ -41,6 +44,8 @@ class model:
         self.perm = perm
         model.nhypo = len(perm)
         model.nx = len(perm[0][0])
+        model.obsY = [0., 1.] # hard-wired binary setting
+        model.ny = len(model.obsY)
         self.nperm = [len(p) for p in self.perm]
 
         model.initialize(self)
@@ -260,7 +265,8 @@ class model:
         x = uniformSampleMaxInd(new_score)
         return x
 
-
+    # ###########################################################################
+    # This section follows e-vs-t-v1 (4)-(6), which may not be perfectly right
     def get_hypoProbeMatrix(self, postJoint, probeX):
         hypoProbeM = model.initHypoProbeMatrix(self, postJoint, probeX)
         hypoProbeM = model.iterate_til_converge(self, postJoint, hypoProbeM, probeX)
@@ -354,7 +360,107 @@ class model:
                 print('maxIter reached but not converged yet')
                 break
         return hypoProbeM
+    # ###########################################################################
 
+    # ###########################################################################
+    # # This section tries a new formulation, but does not produce good results
+    # # The new formulation may be the one in the comments in the e-vs-t paper
+    # def get_hypoProbeObsMatrix(self, postJoint, probeX):
+    #     hypoProbeObsM = model.initHypoProbeObsMatrix(self, postJoint, probeX)
+    #     hypoProbeObsM = model.iterate_til_converge(self, postJoint, hypoProbeObsM, probeX)
+    #     return hypoProbeObsM
+    #
+    # def initHypoProbeObsMatrix(self, postJoint, probeX):
+    #     """ initialize hypo-probex-obsy matrix """
+    #     hypoProbeObsM = np.zeros([model.nhypo, model.nx, model.ny])
+    #     for probex in probeX:
+    #         for indy, obsy in enumerate(model.obsY):
+    #             newJoint = model.updatePosteriorJoint(self,
+    #                                                 [probex], [obsy], postJoint)
+    #             newPostHypo = model.posteriorHypo(newJoint)
+    #             for ihypo in range(model.nhypo):
+    #                 hypoProbeObsM[ihypo, probex, indy] = newPostHypo[ihypo]
+    #     return hypoProbeObsM # this is normalize along hypo becaue of posteriorHypo
+    #
+    # def updateHypoProbeObsMatrix(self, postJoint, hypoProbeM, probeX):
+    #     """ update hypo-probex-obsy matrix with teacher's likelihood hypoProbeM """
+    #     hypoProbeObsM = np.zeros([model.nhypo, model.nx, model.ny])
+    #     for probex in probeX:
+    #         for indy, obsy in enumerate(model.obsY):
+    #             update = model.updatePosteriorJointWithTeacher(self,
+    #                      [probex], [obsy], postJoint, hypoProbeM[:,probex])
+    #             newPostHypo = model.posteriorHypo(update)
+    #             for ihypo in range(model.nhypo):
+    #                 hypoProbeObsM[ihypo, probex, indy] = newPostHypo[ihypo]
+    #     return hypoProbeObsM # this is normalize along hypo becaue of posteriorHypo
+    #
+    # def predMargY(self, postJoint, hypoProbeObsM, probeX):
+    #     """ marginalize over obsy in hypo-probex-obsy matrix
+    #         using the predictive distribution of obsy """
+    #     hypoProbeM = np.zeros([model.nhypo, model.nx])
+    #     for ihypo in range(model.nhypo):
+    #         postLabel = model.posteriorLabelGivenHypo(self, postJoint, ihypo)
+    #         for probex in probeX:
+    #             yis0, yis1 = model.predicty(self.uniPerm, postLabel, probex)
+    #             for indy, obsy in enumerate(model.obsY):
+    #                 if obsy == 0:
+    #                     predPy = yis0
+    #                 elif obsy == 1:
+    #                     predPy = yis1
+    #                 hypoProbeM[ihypo, probex] += predPy*hypoProbeObsM[ihypo, probex, indy]
+    #     return hypoProbeM
+    #
+    # def iterate_teacher(self, postJoint, M_3, probeX):
+    #     """ M_3 is 3-d array (hypoProbeObsM); M_2 is 2-d array (hypoProbeM)
+    #         input M_3, outputs M_2 """
+    #     M_3 = deepcopy(M_3)
+    #     M_3 = normalizeRowin3D(M_3) # teacher's normalization along probe before marginalization
+    #     M_2 = model.predMargY(self, postJoint, M_3, probeX)
+    #     if (self.max_mode == "softmax"):
+    #         M_2 = np.power(M_2, self.alpha)
+    #     elif (self.max_mode == "hardmax"):
+    #         M_2 = max_thresh_row(M_2)
+    #     M_2 = normalizeRow(M_2) # normalize along probe again after predMargy
+    #     return M_2
+    #
+    # def iterate_learner(self, postJoint, M_2, probeX):
+    #     """ M_3 is 3-d array (hypoProbeObsM); M_2 is 2-d array (hypoProbeM)
+    #         input M_2, outputs M_3 """
+    #     # TODO: Does not work with look_ahead = zero-step!
+    #     if (self.look_ahead == "one-step"):
+    #         M_3 = model.updateHypoProbeObsMatrix(self, postJoint, M_2, probeX) # this function already produces hypo-normalized array
+    #     elif (self.look_ahead == "zero-step"):
+    #         warnings.warn('Cannot use look_ahead: zero-step!')
+    #     return M_3
+    #
+    # def iterate_once(self, postJoint, hypoProbeObsM, probeX):
+    #     """ M_3 is 3-d array (hypoProbeObsM); M_2 is 2-d array (hypoProbeM) """
+    #     # TODO: Does not work with look_ahead = zero-step!
+    #     M_3 = deepcopy(hypoProbeObsM)
+    #     M_2 = model.iterate_teacher(self, postJoint, M_3, probeX)
+    #     M_3 = model.iterate_learner(self, postJoint, M_2, probeX)
+    #     flag_same = np.allclose(hypoProbeObsM, M_3)
+    #     return M_3, flag_same
+    #
+    # def iterate_til_converge(self, postJoint, hypoProbeObsM, probeX):
+    #     if (self.max_mode == "hardmax"):
+    #         maxIter = 5 # 3
+    #     elif (self.max_mode == "softmax"):
+    #         if (self.look_ahead == "one-step"):
+    #             maxIter = 50
+    #         elif (self.look_ahead =="zero-step"):
+    #             maxIter = 30
+    #     count = 0
+    #     stopFlag = False
+    #     while (not stopFlag):
+    #         hypoProbeObsM, stopFlag = model.iterate_once(self, postJoint, hypoProbeObsM, probeX)
+    #         count += 1
+    #         # print('Iter at step %s' %(count))
+    #         if count == maxIter:
+    #             print('maxIter reached but not converged yet')
+    #             break
+    #     return hypoProbeObsM
+    # ###########################################################################
 
     @staticmethod
     def teachingChoice(hypoProbeM, ihypo, probeX):

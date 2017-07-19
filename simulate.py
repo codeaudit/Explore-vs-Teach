@@ -169,7 +169,11 @@ def teach(pair, ihypo, pattern, max_step, showFlag=False):
         # print("Before update P(h|D) = %s" %(postHypo))
 
         probeX = np.delete(Xfull, Xd)
-        hypoProbeM = pair.get_hypoProbeMatrix(postJoint, probeX)
+        # begin replace: e-v-t-v1 with new version - note new version produces bad results
+        hypoProbeM = pair.get_hypoProbeMatrix(postJoint, probeX) # old version
+        # hypoProbeObsM = pair.get_hypoProbeObsMatrix(postJoint, probeX) # new version
+        # hypoProbeM = pair.iterate_teacher(postJoint, hypoProbeObsM, probeX) # new version
+        # end replace
         xnext, probXHypo = pair.teachingChoice(hypoProbeM, ihypo, probeX)
         ynext = pair.gety(pattern, xnext)
         postJoint = pair.updatePosteriorJointWithTeacher(
@@ -207,7 +211,11 @@ def interact(teacher, ihypo, pattern, learner, max_step, showFlag=False):
 
         probeX = np.delete(Xfull, Xd)
         # teacher chooses xnext and updates belief
-        _hypoProbeM = teacher.get_hypoProbeMatrix(_postJoint, probeX)
+        # begin replace: e-v-t-v1 with new version - note new version produces bad results
+        _hypoProbeM = teacher.get_hypoProbeMatrix(_postJoint, probeX) # old version
+        # _hypoProbeObsM = teacher.get_hypoProbeObsMatrix(_postJoint, probeX) # new version
+        # _hypoProbeM = teacher.iterate_teacher(_postJoint, _hypoProbeObsM) # new version
+        # end replace
         xnext, _probXHypo = teacher.teachingChoice(_hypoProbeM, ihypo, probeX)
         ynext = learner.gety(pattern, xnext)
         _postJoint = teacher.updatePosteriorJointWithTeacher(
@@ -234,6 +242,7 @@ def show_teach(step, ihypo, pattern, Xd, Yd, Xfull, probeX,
     plot_M = deepcopy(hypoProbeM)
     plot_M[:,probeX] += 1e-6
     print("step %s" %(step))
+    print("P_T(x,h,D) = %s" %(hypoProbeM))
     print("P_T(x|h) = %s" %(probXHypo))
     print("P(h,f|D) = %s" %(postJoint)) #why does this make a difference?
     print("Before update P(h|D) = %s" %(postHypo))
@@ -716,17 +725,19 @@ if __name__ == '__main__':
 
     # simulate_nhypo()
 
-    # simulate_overlap(data_name="test-sim_overlap")
+    simulate_overlap(data_name="test-sim_overlap")
     overlap_data = np.load('test-sim_overlap.npz')
     plot_overlap(overlap_data, fig_name='fig_overlap_aligned.pdf')
     # stats_overlap(overlap_data)
 
-    # mode = "bad_teacher"  # bad_teacher or bad_learner
-    # simulate_swap(mode, data_name="test-sim_overlap_1_bad_teacher")
+    mode = "bad_learner"  # bad_teacher or bad_learner
+    simulate_swap(mode, data_name="test-sim_overlap_1_bad_learner")
     swap_data = np.load('test-sim_overlap_1_bad_learner.npz')
     plot_swap(swap_data, fig_name='fig_overlap_1_bad_learner.pdf')
     # stats_swap(swap_data)
 
+    mode = "bad_teacher"  # bad_teacher or bad_learner
+    simulate_swap(mode, data_name="test-sim_overlap_1_bad_teacher")
     swap_data = np.load('test-sim_overlap_1_bad_teacher.npz')
     plot_swap(swap_data, fig_name='fig_overlap_1_bad_teacher.pdf')
 
